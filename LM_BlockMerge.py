@@ -8,11 +8,12 @@ import torch
 
 #mixer output settings
 
-fp16 = False                 #perform operations in fp16. Saves memory, but CPU inference will not be possible.
+fp16 = True                 #perform operations in fp16. Saves memory, but CPU inference will not be possible.
 always_output_fp16 = True   #if true, will output fp16 even if operating in fp32
-max_shard_size = "2000MiB"  #set output shard size
+max_shard_size = "5000MiB"  #set output shard size
 verbose_info = True        #will show model information when loading
 force_cpu = True            #only use cpu
+merge_ration_all = 0.7     #if used, disable sliders
 
 # Create a GUI for selecting the first and second models, and save path for merged model
 root = tk.Tk()
@@ -45,21 +46,20 @@ second_frame = Frame(my_canvas)
 # Add that New frame To a Window In The Canvas
 my_canvas.create_window((0,0), window=second_frame, anchor="nw")
 
-# example w/button on how to put a thing in the window with the scrollbar, second_frame is the proper place.
-#for thing in range(100):
-#    Button(second_frame, text=f'Button {thing} Yo!').grid(row=thing, column=0, pady=10, padx=10)
-
 # Ask user to select the first model
 print("Opening file dialog, please select FIRST model directory...")
 first_model_path = filedialog.askdirectory(title="Select the first model")
+print(f"FIRST model selected: {first_model_path}")
 
 # Ask user to select the second model
 print("Opening file dialog, please select SECOND model directory...")
 second_model_path = filedialog.askdirectory(title="Select the second model")
+print(f"SECOND model selected: {second_model_path}")
 
 # Ask user to select the save path for the merged model
 print("Opening file dialog, please select OUTPUT model directory...")
 merged_model_path = filedialog.askdirectory(title="Select where to save the merged model")
+print(f"Output path: {merged_model_path}")
 
 if not first_model_path or not second_model_path:
     print("\nYou must select two directories containing models to merge and one output directory. Exiting.")
@@ -110,37 +110,22 @@ with torch.no_grad():
             
     # Create a window with sliders for each layer
     layer_sliders = []
-    for i in range(num_layers):
-#anchor second_frame puts things inside the area with the scrollbar
-#        layer_slider = LayerSlider(root, i) #modified below
-        layer_slider = LayerSlider(second_frame, i)
-        layer_slider.pack()
-        layer_sliders.append(layer_slider)
+    if merge_ration_all == 0:
+        for i in range(num_layers):
+            layer_slider = LayerSlider(second_frame, i)
+            layer_slider.pack()
+            layer_sliders.append(layer_slider)
 
 # Create a "commit and merge" button
 def merge_models():
-    with torch.no_grad(): 
-        # Read the merge ratios from the sliders
-        merge_ratios = [layer_slider.slider.get() for layer_slider in layer_sliders]
-        
-        #    # Check that the merge ratios add up to 1
-        #    if sum(merge_ratios) != 1:
-        #        messagebox.showerror("Error", "Merge ratios must add up to 1")
-        #        return
-        
-        # Merge the models using the merge ratios
-        for i in range(num_layers):
-            # Determine how much of each layer to use from each model
-            first_ratio = merge_ratios[i]
-            second_ratio = 1 - first_ratio
-
-    # Merge the layer from the two models dependent on the model type
-
-def merge_models():
     with torch.no_grad():
         # Read the merge ratios from the sliders
-        merge_ratios = [layer_slider.slider.get() for layer_slider in layer_sliders]
+        if merge_ration_all == 0:
+            merge_ratios = [layer_slider.slider.get() for layer_slider in layer_sliders]
+        else:
+            merge_ratios = [merge_ration_all] * num_layers
 
+        print(f"merge rations: {merge_ratios}")
         # Merge the models using the merge ratios
         for i in range(num_layers):
             # Determine how much of each layer to use from each model
@@ -244,15 +229,17 @@ def merge_models():
         # Close the GUI
         root.destroy()
 
-#commit button on GUI
-commit_button = tk.Button(root, text="Commit and Merge", command=merge_models)
-commit_button.pack()
-
 def handle_return(event):
     merge_models()
 
-#allows pressing Enter (if the GUI is the current window) to commit and merge.
-root.bind('<Return>', handle_return)
+#commit button on GUI
+if merge_ration_all == 0:
+    commit_button = tk.Button(root, text="Commit and Merge", command=merge_models)
+    commit_button.pack()
+    #allows pressing Enter (if the GUI is the current window) to commit and merge.
+    root.bind('<Return>', handle_return)
+else:
+    merge_models()
 
 # Run the GUI
 root.mainloop()
